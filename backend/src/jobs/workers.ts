@@ -237,8 +237,13 @@ async function processNotificationJob(job: any) {
             `Notification channel 'slack' is not implemented; refusing to report success for job ${job.id}`,
           );
         case 'discord':
-          // await discordService.send(recipient, message);
-          break;
+          // The Discord delivery implementation is not wired up yet. Fail the
+          // job distinctly instead of silently reporting success so callers
+          // and queue stats (getNotificationQueueStats/getFailedNotifications)
+          // reflect the channel as failing until it is implemented.
+          throw new Error(
+            `Notification channel 'discord' is not implemented; refusing to report success for job ${job.id}`,
+          );
         default:
           console.warn(`Unknown notification type: ${type}`);
       }
@@ -287,85 +292,6 @@ const workerConfigs = {
       concurrency: 2,
     },
     contract: {
-      processor: processSyncContractJob,
-      concurrency: 3,
-    },
-    deploy: {
-      processor: processDeployContractJob,
-      concurrency: 1, // Only one deployment at a time
-    },
-  },
-  notification: {
-    processor: processNotificationJob,
-    concurrency: 15,
-  },
-};
+      processor: processS
 
-// Initialize all workers
-export function initializeWorkers(): Map<string, Worker> {
-  const workers = new Map<string, Worker>();
-
-  // Initialize email worker
-  const emailWorker = new Worker('email', processEmailJob, {
-    connection: queueManager.getConnection(),
-    concurrency: workerConfigs.email.concurrency,
-  });
-  workers.set('email', emailWorker);
-
-  // Initialize payout worker
-  const payoutWorker = new Worker('payout', processPayoutJob, {
-    connection: queueManager.getConnection(),
-    concurrency: workerConfigs.payout.concurrency,
-  });
-  workers.set('payout', payoutWorker);
-
-  // Initialize sync workers
-  const syncAccountWorker = new Worker('sync-account', processSyncAccountJob, {
-    connection: queueManager.getConnection(),
-    concurrency: workerConfigs.sync.account.concurrency,
-  });
-  workers.set('sync-account', syncAccountWorker);
-
-  const syncTransactionsWorker = new Worker('sync-transactions', processSyncTransactionsJob, {
-    connection: queueManager.getConnection(),
-    concurrency: workerConfigs.sync.transactions.concurrency,
-  });
-  workers.set('sync-transactions', syncTransactionsWorker);
-
-  const syncBalancesWorker = new Worker('sync-balances', processSyncBalancesJob, {
-    connection: queueManager.getConnection(),
-    concurrency: workerConfigs.sync.balances.concurrency,
-  });
-  workers.set('sync-balances', syncBalancesWorker);
-
-  const fullSyncWorker = new Worker('full-sync', processFullSyncJob, {
-    connection: queueManager.getConnection(),
-    concurrency: workerConfigs.sync.full.concurrency,
-  });
-  workers.set('full-sync', fullSyncWorker);
-
-  const syncContractWorker = new Worker('sync-contract', processSyncContractJob, {
-    connection: queueManager.getConnection(),
-    concurrency: workerConfigs.sync.contract.concurrency,
-  });
-  workers.set('sync-contract', syncContractWorker);
-
-  const deployContractWorker = new Worker('deploy-contract', processDeployContractJob, {
-    connection: queueManager.getConnection(),
-    concurrency: workerConfigs.sync.deploy.concurrency,
-  });
-  workers.set('deploy-contract', deployContractWorker);
-
-  // Initialize notification worker
-  const notificationWorker = new Worker('notification', processNotificationJob, {
-    connection: queueManager.getConnection(),
-    concurrency: workerConfigs.notification.concurrency,
-  });
-  workers.set('notification', notificationWorker);
-
-  logger.info('All workers initialized');
-
-  return workers;
-}
-
-export { processNotificationJob };
+/* … truncated 2739 chars — edit only what you need near the top … */

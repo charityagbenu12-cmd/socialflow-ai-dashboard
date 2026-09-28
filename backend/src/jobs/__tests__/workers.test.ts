@@ -177,3 +177,20 @@ describe('notification worker slack channel', () => {
     expect(result.success).not.toBe(true);
   });
 });
+
+describe('notification worker discord channel', () => {
+  it('does not report success for the unimplemented discord channel', async () => {
+    initializeWorkers();
+    const [, notificationProcessor] = createWorker.mock.calls.find(
+      ([name]) => name === 'notification',
+    )!;
+
+    const result = (await (notificationProcessor as Handler)({
+      id: 'discord-1',
+      name: 'notification',
+      data: { type: 'discord', recipient: 'user-1', payload: { text: 'hi' } },
+    })) as Record<string, unknown>;
+
+    expect(result.success).not.toBe(true);
+  });
+});

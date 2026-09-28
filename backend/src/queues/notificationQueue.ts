@@ -40,6 +40,22 @@ export function isNotificationChannelImplemented(type: NotificationType): boolea
   return !UNIMPLEMENTED_NOTIFICATION_CHANNELS.includes(type);
 }
 
+/**
+ * Error thrown when a notification job targets a channel that has no
+ * delivery implementation yet. Kept distinct so the worker can fail the
+ * job (and queue stats/failed lists reflect it) instead of reporting
+ * success for a no-op.
+ */
+export class UnimplementedNotificationChannelError extends Error {
+  readonly channel: NotificationType;
+
+  constructor(channel: NotificationType) {
+    super(`Notification channel '${channel}' is not implemented`);
+    this.name = 'UnimplementedNotificationChannelError';
+    this.channel = channel;
+  }
+}
+
 // Create the notification queue
 export const notificationQueue = queueManager.createQueue(NOTIFICATION_QUEUE_NAME, {
   attempts: 3,
