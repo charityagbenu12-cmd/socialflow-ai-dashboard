@@ -12,6 +12,17 @@ type UserWithoutSensitive = Omit<User, 'passwordHash' | 'refreshTokens'>;
  *
  * Encapsulates all database operations for the User model.
  * Accepts an optional PrismaClient so it can be easily tested with a mock.
+ *
+ * When to use which user data-access path (see #1591):
+ * - `UserRepository` / `userRepository`: read paths that benefit from the
+ *   `user:<id>` cache and the sensitive-field exclusion (`findById`), or
+ *   write paths that must invalidate that cache (`update`, `delete`).
+ *   Prefer this for user lookups in request handlers.
+ * - `UserStore`: higher-level user domain logic (registration, credential
+ *   flows, token handling) that composes multiple operations.
+ * - Direct `prisma.user.*`: one-off queries inside transactions or where the
+ *   cache must be bypassed (e.g. auth credential checks needing
+ *   `findByIdWithSensitive`/`findByEmail`).
  */
 export class UserRepository {
   constructor(private readonly db: PrismaClient = defaultPrisma) {}
