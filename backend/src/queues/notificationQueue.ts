@@ -26,6 +26,20 @@ export interface BulkNotificationData {
   batchId?: string;
 }
 
+/**
+ * Notification channels that are not yet implemented by the worker.
+ * Jobs for these channels must fail distinctly instead of silently
+ * reporting success, so callers and queue stats reflect the real state.
+ */
+export const UNIMPLEMENTED_NOTIFICATION_CHANNELS: ReadonlyArray<NotificationType> = [
+  'slack',
+  'discord',
+];
+
+export function isNotificationChannelImplemented(type: NotificationType): boolean {
+  return !UNIMPLEMENTED_NOTIFICATION_CHANNELS.includes(type);
+}
+
 // Create the notification queue
 export const notificationQueue = queueManager.createQueue(NOTIFICATION_QUEUE_NAME, {
   attempts: 3,
