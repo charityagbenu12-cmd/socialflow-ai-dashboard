@@ -97,3 +97,38 @@ describe('Subscription.orgUpdate – org membership validation', () => {
     ).rejects.toThrow('UNAUTHENTICATED');
   });
 });
+
+describe('Query.post – organization membership enforcement', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  it('throws FORBIDDEN when the caller is not a member of the post\'s organization', async () => {
+    mockIsBlacklisted.mockResolvedValue(false);
+    const { prisma } = require('../../lib/prisma');
+    prisma.post.findUnique.mockResolvedValue({ id: 'post-1', organizationId: 'org-b' });
+    prisma.organizationMember.findUnique.mockResolvedValue(null);
+
+    const ctx = { userId: 'user-1', tokenKey: 'jti-abc' };
+    await expect(resolvers.Query.post({}, { id: 'post-1' }, ctx)).rejects.toThrow('FORBIDDEN');
+  });
+
+  it('returns the post for a member of the owning organization', async () => {
+    mockIsBlacklisted.mockResolvedValue(false);
+    const { prisma } = require('../../lib/prisma');
+    const post = { id: 'post-1', organizationId: 'org-a', title: 'Hello' };
+    prisma.post.findUnique.mockResolvedValue(post);
+    prisma.organizationMember.findUnique.mockResolvedValue({ organizationId: 'org-a' });
+
+    const ctx = { userId: 'user-1', tokenKey: 'jti-abc' };
+    const result = await resolvers.Query.post({}, { id: 'post-1' }, ctx);
+    expect(result).toEqual(post);
+  });
+
+  it('throws NOT_FOUND when the post does not exist', async () => {
+    mockIsBlacklisted.mockResolvedValue(false);
+    const { prisma } = require('../../lib/prisma');
+    prisma.post.findUnique.mockResolvedValue(null);
+
+    const ctx = { userId: 'user-1', tokenKey: 'jti-abc' };
+    await expect(resolvers.Query.post({}, { id: 'missing' }, ctx)).rejects.toThrow('NOT_FOUND');
+  });
+});

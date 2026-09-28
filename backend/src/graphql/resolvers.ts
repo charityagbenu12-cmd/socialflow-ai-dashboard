@@ -98,9 +98,20 @@ export const resolvers = {
       });
     },
 
-    /** Return a single post by ID. */
+    /**
+     * Return a single post by ID. Scoped to the caller's organisation:
+     * the post's owning org is resolved first and membership is asserted
+     * before returning, mirroring updatePost/deletePost. A missing post
+     * yields NOT_FOUND so existence is not leaked via a different error.
+     */
     post: async (_: unknown, { id }: { id: string }, ctx: GraphQLContext) => {
-      await requireAuth(ctx);
+      const userId = await requireAuth(ctx);
+      const existing = await prisma.post.findUnique({
+        where: { id },
+        select: { organizationId: true },
+      });
+      if (!existing) throw new Error('NOT_FOUND');
+      await assertOrgMember(userId, existing.organizationId);
       return prisma.post.findUnique({ where: { id } });
     },
   },
