@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { injectable, inject, optional } from 'inversify';
 import { HealthMonitor } from './healthMonitor';
-import { TYPES } from '../config/inversify.config';
+import { TYPES } from '../../../config/types';
 import { redis } from '../../../lib/redis';
 
 @injectable()

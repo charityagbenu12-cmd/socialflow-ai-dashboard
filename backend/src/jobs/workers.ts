@@ -1,210 +1,79 @@
 import { queueManager } from '../queues/queueManager';
-import { Worker } from 'bullmq';
+import { Worker, UnrecoverableError } from 'bullmq';
 import { moderate } from '../services/ModerationService';
 import { MODERATION_QUEUE_NAME, enqueueToDLQ } from '../queues/moderationQueue';
 import { getSmsService } from '../services/smsService';
 import { createLogger } from '../lib/logger';
 import { circuitBreakerService } from '../services/CircuitBreakerService';
+import { processEmailJob, createEmailWorker } from './emailJob';
+import { processPayoutJob, createPayoutWorker } from './payoutJob';
 
 const logger = createLogger('workers');
 
-// Email job processor
-async function processEmailJob(job: any) {
-  const {
-    to,
-    subject: _subject,
-    body: _body,
-    html: _html,
-    attachments: _attachments,
-    metadata,
-  } = job.data;
-
-  console.log(`Processing email job ${job.id}: sending to ${to}`);
-
-  // Simulate email sending - replace with actual email service
-  // const emailService = require('../services/emailService').emailService;
-  // await emailService.send({ to, subject, body, html, attachments });
-
-  // For now, simulate processing time
-  await new Promise((resolve) => setTimeout(resolve, 100));
-
-  console.log(`Email job ${job.id} completed: sent to ${to}`);
-
-  return {
-    success: true,
-    emailId: job.id,
-    recipient: to,
-    sentAt: new Date().toISOString(),
-    metadata,
-  };
-}
-
-// Payout job processor
-async function processPayoutJob(job: any) {
-  const {
-    groupId,
-    amount,
-    recipient,
-    recipientType: _recipientType,
-    currency,
-    description: _description,
-    metadata,
-  } = job.data;
-
-  console.log(`Processing payout job ${job.id}: ${amount} ${currency} to ${recipient}`);
-
-  // Simulate payout processing - replace with actual payment service
-  // const paymentService = require('../services/paymentService').paymentService;
-  // await paymentService.process({ groupId, amount, recipient, recipientType, currency });
-
-  // For now, simulate processing time
-  await new Promise((resolve) => setTimeout(resolve, 500));
-
-  console.log(`Payout job ${job.id} completed: ${amount} ${currency} sent to ${recipient}`);
-
-  return {
-    success: true,
-    transactionId: job.id,
-    groupId,
-    amount,
-    currency,
-    recipient,
-    status: 'completed',
-    processedAt: new Date().toISOString(),
-    metadata,
-  };
-}
-
-// Sync job processors
-async function processSyncAccountJob(job: any) {
-  const { accountId, metadata } = job.data;
-
-  console.log(`Processing account sync job ${job.id}: syncing account ${accountId}`);
-
-  // Simulate blockchain sync - replace with actual blockchain service
-  // const blockchainService = require('../services/blockchainService').blockchainService;
-  // await blockchainService.syncAccount(accountId);
-
-  await new Promise((resolve) => setTimeout(resolve, 300));
-
-  console.log(`Account sync job ${job.id} completed for account ${accountId}`);
-
-  return {
-    success: true,
+/**
+ * Sync job processors.
+ *
+ * There is no blockchain service layer wired into the backend yet, so these
+ * processors cannot perform a real account/transaction/balance/contract sync.
+ * Rather than fabricating `success: true` (which hides the fact that nothing
+ * was synced from job stats, alerting and callers), each processor fails the
+ * job with an UnrecoverableError so it is marked failed without burning
+ * retries. Replace the body with the real service call once it exists.
+ */
+function failUnimplementedSync(job: Job, operation: string): never {
+  logger.error(`Sync job ${job.id} (${job.name}) failed: ${operation} is not implemented`, {
     jobId: job.id,
-    accountId,
-    syncedAt: new Date().toISOString(),
-    metadata,
-  };
-}
-
-async function processSyncTransactionsJob(job: any) {
-  const { accountId, startBlock, endBlock, metadata } = job.data;
-
-  console.log(
-    `Processing transactions sync job ${job.id}: syncing ${accountId} blocks ${startBlock}-${endBlock}`,
+    jobName: job.name,
+    operation,
+  });
+  throw new UnrecoverableError(
+    `Sync operation "${operation}" is not implemented: no blockchain service is configured`,
   );
-
-  // Simulate transaction sync
-  await new Promise((resolve) => setTimeout(resolve, 400));
-
-  console.log(`Transactions sync job ${job.id} completed`);
-
-  return {
-    success: true,
-    jobId: job.id,
-    accountId,
-    startBlock,
-    endBlock,
-    syncedAt: new Date().toISOString(),
-    metadata,
-  };
 }
 
-async function processSyncBalancesJob(job: any) {
-  const { accountId, metadata } = job.data;
-
-  console.log(`Processing balance sync job ${job.id}: syncing balances for ${accountId}`);
-
-  await new Promise((resolve) => setTimeout(resolve, 200));
-
-  console.log(`Balance sync job ${job.id} completed`);
-
-  return {
-    success: true,
-    jobId: job.id,
-    accountId,
-    syncedAt: new Date().toISOString(),
-    metadata,
-  };
+async function processSyncAccountJob(job: Job): Promise<never> {
+  return failUnimplementedSync(job, 'syncAccount');
 }
 
-async function processFullSyncJob(job: any) {
-  const { accountId, metadata } = job.data;
-
-  console.log(`Processing full sync job ${job.id}: full sync for ${accountId}`);
-
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-
-  console.log(`Full sync job ${job.id} completed`);
-
-  return {
-    success: true,
-    jobId: job.id,
-    accountId,
-    syncedAt: new Date().toISOString(),
-    metadata,
-  };
+async function processSyncTransactionsJob(job: Job): Promise<never> {
+  return failUnimplementedSync(job, 'syncTransactions');
 }
 
-async function processSyncContractJob(job: any) {
-  const { contractId, contractType, action, metadata } = job.data;
-
-  console.log(
-    `Processing contract sync job ${job.id}: ${action} ${contractType} contract ${contractId}`,
-  );
-
-  await new Promise((resolve) => setTimeout(resolve, 500));
-
-  console.log(`Contract sync job ${job.id} completed`);
-
-  return {
-    success: true,
-    jobId: job.id,
-    contractId,
-    contractType,
-    action,
-    syncedAt: new Date().toISOString(),
-    metadata,
-  };
+async function processSyncBalancesJob(job: Job): Promise<never> {
+  return failUnimplementedSync(job, 'syncBalances');
 }
 
-async function processDeployContractJob(job: any) {
-  const { contractId, contractType, metadata } = job.data;
-
-  console.log(
-    `Processing contract deploy job ${job.id}: deploying ${contractType} contract ${contractId}`,
-  );
-
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-
-  console.log(`Contract deploy job ${job.id} completed`);
-
-  return {
-    success: true,
-    jobId: job.id,
-    contractId,
-    contractType,
-    deployedAt: new Date().toISOString(),
-    metadata,
-  };
+async function processFullSyncJob(job: Job): Promise<never> {
+  return failUnimplementedSync(job, 'fullSync');
 }
+
+async function processSyncContractJob(job: Job): Promise<never> {
+  return failUnimplementedSync(job, 'syncContract');
+}
+
+async function processDeployContractJob(job: Job): Promise<never> {
+  return failUnimplementedSync(job, 'deployContract');
+}
+
+// Notification channels that have no delivery service wired up yet
+const UNIMPLEMENTED_NOTIFICATION_CHANNELS = new Set(['push', 'in_app', 'webhook']);
 
 // Notification job processor
 async function processNotificationJob(job: any) {
   const { type, recipient, title: _title, message: _message, data: _data, metadata } = job.data;
 
   console.log(`Processing notification job ${job.id}: ${type} notification to ${recipient}`);
+
+  // Channels without a delivery implementation must fail the job rather than
+  // report success (#1585, #1586, #1587). Thrown before the circuit breaker so
+  // they don't trip it for working channels, and as UnrecoverableError so
+  // BullMQ moves the job straight to the failed set without pointless retries.
+  if (UNIMPLEMENTED_NOTIFICATION_CHANNELS.has(type)) {
+    logger.error(
+      `[notification-worker] Job ${job.id}: '${type}' notification channel is not implemented`,
+    );
+    throw new UnrecoverableError(`Notification channel not implemented: ${type}`);
+  }
 
   // Ensure the notification circuit breaker is registered
   circuitBreakerService.getBreaker('notification');
@@ -216,17 +85,8 @@ async function processNotificationJob(job: any) {
     async () => {
       // Route to appropriate notification service based on type
       switch (type) {
-        case 'push':
-          // await pushService.send(recipient, { title, body: message, data });
-          break;
         case 'sms':
           await getSmsService().send(recipient, _message);
-          break;
-        case 'in_app':
-          // await inAppService.create(recipient, { title, message, data });
-          break;
-        case 'webhook':
-          // await webhookService.send(recipient, { title, message, ...data });
           break;
         case 'slack':
           // The Slack delivery implementation is not wired up yet. Fail the
@@ -294,4 +154,93 @@ const workerConfigs = {
     contract: {
       processor: processS
 
-/* … truncated 2739 chars — edit only what you need near the top … */
+// Initialize all workers
+export function initializeWorkers(): Map<string, Worker> {
+  const workers = new Map<string, Worker>();
+
+  // Email worker — SES-aware processor from emailJob.ts (non-retryable error
+  // handling, email_dropped_total metric, drop-rate alerting)
+  workers.set('email', createEmailWorker());
+
+  // Payout worker — idempotent/locked processor from payoutJob.ts
+  // (transaction-hash dedup, LockService lock, PayoutTransaction/PayoutFailure persistence)
+  workers.set('payout', createPayoutWorker());
+
+  // Sync workers
+  const syncWorker = queueManager.createWorker(
+    'sync',
+    async (job) => {
+      const jobName = job.name;
+
+      switch (jobName) {
+        case 'sync-account':
+          return processSyncAccountJob(job);
+        case 'sync-transactions':
+          return processSyncTransactionsJob(job);
+        case 'sync-balances':
+          return processSyncBalancesJob(job);
+        case 'full-sync':
+          return processFullSyncJob(job);
+        case 'sync-contract':
+          return processSyncContractJob(job);
+        case 'deploy-contract':
+          return processDeployContractJob(job);
+        default:
+          throw new UnrecoverableError(`Unknown sync job type: ${jobName}`);
+      }
+    },
+    {
+      concurrency: 5,
+    },
+  );
+  workers.set('sync', syncWorker);
+
+  // Notification worker
+  const notificationWorker = queueManager.createWorker('notification', processNotificationJob, {
+    concurrency: workerConfigs.notification.concurrency,
+  });
+  workers.set('notification', notificationWorker);
+
+  // Moderation worker with DLQ routing
+  const moderationWorker = queueManager.createWorker(
+    MODERATION_QUEUE_NAME,
+    async (job) => {
+      const { postId } = job.data as { postId: string };
+      const status = await moderate(postId);
+      return { postId, status };
+    },
+    { concurrency: 5 },
+  );
+
+  // Handle failed jobs that exceed retry limit
+  moderationWorker.on('failed', async (job, error) => {
+    if (job && job.attemptsMade >= (job.opts.attempts || 3)) {
+      logger.warn(
+        `[moderation-worker] Job ${job.id} exhausted retries, moving to DLQ: ${error.message}`,
+      );
+      await enqueueToDLQ(job.data.postId, job.id || 'unknown', error.message);
+    }
+  });
+
+  workers.set(MODERATION_QUEUE_NAME, moderationWorker);
+
+  console.log(`Initialized ${workers.size} workers`);
+
+  return workers;
+}
+
+// Export worker configs for external use
+export { workerConfigs };
+
+// Export processor functions for direct testing
+export {
+  processEmailJob,
+  processPayoutJob,
+  processSyncAccountJob,
+  processSyncTransactionsJob,
+  processSyncBalancesJob,
+  processFullSyncJob,
+  processSyncContractJob,
+  processDeployContractJob,
+  processNotificationJob,
+};

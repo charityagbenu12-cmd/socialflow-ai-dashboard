@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { injectable, singleton } from 'inversify';
-import { createLogger } from '../lib/logger';
+import { createLogger } from '../../../lib/logger';
 
 const logger = createLogger('alertConfig');
 

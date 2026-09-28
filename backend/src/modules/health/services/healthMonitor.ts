@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { injectable, inject } from 'inversify';
 import { NotificationManager } from './notificationProvider';
 import { alertConfigService } from './alertConfigService';
-import { TYPES } from '../config/inversify.config';
+import { TYPES } from '../../../config/types';
 
 export interface HealthMetrics {
   service: string;

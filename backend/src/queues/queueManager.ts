@@ -1,3 +1,4 @@
+import { EventEmitter } from 'events';
 import { Queue, Worker, QueueEvents, JobsOptions, ConnectionOptions } from 'bullmq';
 import Redis from 'ioredis';
 import { config } from '../config/config';
@@ -92,11 +93,15 @@ export interface QueueConfig {
 
 /**
  * QueueManager - Centralized queue management for BullMQ
- * Handles creation, lifecycle, and monitoring of all job queues
+ * Handles creation, lifecycle, and monitoring of all job queues.
+ *
+ * Emits 'queue-created' (name: string, queue: Queue, events: QueueEvents) whenever
+ * a new queue is registered, so observers can attach to queues created later.
  */
-export class QueueManager {
+export class QueueManager extends EventEmitter {
   private queues: Map<string, Queue> = new Map();
   private workers: Map<string, Worker> = new Map();
+  private workerProcessors: Map<string, (job: any, token?: string) => Promise<any>> = new Map();
   private queueEvents: Map<string, QueueEvents> = new Map();
 
   /**
@@ -139,20 +144,38 @@ export class QueueManager {
 
     this.queues.set(name, queue);
     logger.info(`Queue "${name}" created`, { queueName: name });
+    this.emit('queue-created', name, queue, queueEvents);
 
     return queue;
   }
 
   /**
-   * Create a worker for processing jobs
+   * Create a worker for processing jobs.
+   *
+   * Only one worker is kept per queue name. If a worker is already registered
+   * for `name`, it is returned unchanged and the `processor` passed here is NOT
+   * attached — a warning is logged when that processor differs from the
+   * registered one so ordering/registration conflicts are visible.
    */
   createWorker(
     name: string,
-    processor: (job: any) => Promise<any>,
+    processor: (job: any, token?: string) => Promise<any>,
     options: { concurrency?: number; limiter?: any } = {},
   ): Worker {
-    if (this.workers.has(name)) {
-      return this.workers.get(name)!;
+    const existing = this.workers.get(name);
+    if (existing) {
+      const registered = this.workerProcessors.get(name);
+      if (registered !== processor) {
+        logger.warn(
+          `Worker for queue "${name}" is already registered; ignoring new processor`,
+          {
+            queueName: name,
+            registeredProcessor: registered?.name || '<anonymous>',
+            ignoredProcessor: processor.name || '<anonymous>',
+          },
+        );
+      }
+      return existing;
     }
 
     const worker = new Worker(name, processor, {
@@ -187,6 +210,7 @@ export class QueueManager {
     });
 
     this.workers.set(name, worker);
+    this.workerProcessors.set(name, processor);
     logger.info(`Worker for queue "${name}" created`, { queueName: name });
 
     return worker;
